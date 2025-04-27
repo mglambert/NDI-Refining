@@ -1,0 +1,3 @@
+[submodule "xQSM/external_code"]
+	path = xQSM/external_code
+	url = git@github.com:sunhongfu/deepMRI.git
