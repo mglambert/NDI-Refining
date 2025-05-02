@@ -39,6 +39,12 @@ COPY custom_inference.py /Code/
 COPY requirements.txt /Code/
 
 # Set up application structure
+WORKDIR /Checkpoints/
+RUN pip install gdown
+RUN gdown --id 1ee5nI-MMySImX2tM4m71szcjFow4DD5g -O QSMnet+_64.tar.gz
+RUN tar -xvzf QSMnet+_64.tar.gz
+RUN rm QSMnet+_64.tar.gz
+
 WORKDIR /Code/
 
 

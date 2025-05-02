@@ -44,11 +44,8 @@ def inf(field):
     Z = tf.compat.v1.placeholder("float", [None, N[0], N[1], N[2], 1])
     keep_prob = tf.compat.v1.placeholder("float")
 
-    print('pirinpimtin', network_model, net_model)
     net_func = getattr(network_model, net_model)
-    print('pipisito', Z, act_func)
     feed_result = net_func(Z, act_func, False, False)
-    print('poucha lioqui')
 
     saver = tf.compat.v1.train.Saver()
     with tf.compat.v1.Session() as sess:
