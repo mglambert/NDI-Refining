@@ -1,0 +1,151 @@
+clearvars
+close all
+clc
+%% Load Data
+addpath('./Data/');
+addpath('./matlab_files/');
+addpath('./matlab_files/nii/');
+
+load('mask_final.mat');
+load('QSMnetp_recon.mat');
+load('xQSM_recon.mat');
+mask = mask_final;
+clear mask_final;
+
+phs_scale =  42.7747892 * 7;
+N = [256, 256, 256];
+TEv = [4, 12, 20, 28] * 1e-3;
+
+
+freqmap = load_nii('./Data/Frequency.nii.gz').img;
+gtsim2 = load_nii('./Data/Sim2ChiGT.nii.gz').img;
+mag = load_nii('./Data/Magnitude.nii.gz').img;
+aux = zeros(164, 205, 205);
+den = zeros(164, 205, 205);
+for i = 1:length(TEv)
+    aux = aux + TEv(i) * mag(:, :, :, i).^2;
+    den = den + TEv(i) * mag(:, :, :, i);
+end
+
+mag = aux ./ (den + eps);
+mag = mag / max(mag(:));
+
+%% NDI alone with magnitude
+
+lrs = 10.^linspace(-0.7, 0.7, 11);
+outputs = {};
+
+for i = 1:length(lrs)
+    
+    params = {};
+    params.input = zeros(N);
+    params.input(1:164, 1:205, 1:205) = freqmap / phs_scale;
+    
+    params.weight = zeros(N);
+    params.weight(1:164, 1:205, 1:205) = mag .* mask;
+    
+    params.K = dipole_kernel(size(params.input), [1,1,1], 0);
+    
+    params.GT = zeros(N);
+    params.GT(1:164, 1:205, 1:205) = gtsim2 .* mask;
+    
+    params.mask = zeros(N);
+    params.mask(1:164, 1:205, 1:205) = mask;
+    
+    params.maxOuterIter = 500;
+    
+    params.tau = lrs(i);
+    
+    outndi = ndi(params);
+    
+    imagesc3d22(outndi.x(1:164, 1:205, 1:205).*mask, ['NDI init zeros ', num2str(outndi.rmse(end))], [90, 90, 90], [-0.1, 0.1]);
+    outputs{i} = outndi;
+end
+%%
+figure;
+hold on;
+texts_ = {};
+vals = [];
+colors = {};
+for i = 1:length(outputs)
+    c = [0.5^(i), 0.7^(i), 0.9^(i-1)];
+    colors{i} = c;
+    plot(outputs{i}.rmse, 'Color', c, 'LineWidth', 2);
+    [val, idx] = min(outputs{i}.rmse);
+%     scatter([idx], [val], "filled");
+%     texts_{i*2 - 1} = ['lr=', num2str(lrs(i))];
+%     texts_{i*2} = '';
+    texts_{i} = ['lr=', num2str(lrs(i))];
+    vals = [vals, val];
+end
+plot(1:length(outputs{1}.rmse), ones(size(outputs{1}.rmse))*min(vals), 'k--',  'LineWidth', 2);
+texts_{end+1} = '';
+set(gca,'fontsize', 14); 
+legend(texts_, 'FontSize',16);
+% xlim([0, 30]);
+ylim([50, 100]);
+title('With magnitude', 'FontSize', 26);
+xlabel('iterations', 'FontSize',20);
+ylabel('NRMSE', 'FontSize',20);
+drawnow;
+
+
+%% NDI alone without magnitude
+
+lrs = 10.^linspace(-0.7, 0.7, 11);
+outputs_sm = {};
+
+for i = 1:length(lrs)
+    
+    params = {};
+    params.input = zeros(N);
+    params.input(1:164, 1:205, 1:205) = freqmap / phs_scale;
+
+    params.weight = zeros(N);
+    params.weight(1:164, 1:205, 1:205) = mask;
+    
+    
+    params.K = dipole_kernel(size(params.input), [1,1,1], 0);
+    
+    params.GT = zeros(N);
+    params.GT(1:164, 1:205, 1:205) = gtsim2 .* mask;
+    
+    params.mask = zeros(N);
+    params.mask(1:164, 1:205, 1:205) = mask;
+    
+    params.maxOuterIter = 500;
+    
+    params.tau = lrs(i);
+    
+    outndi = ndi(params);
+    
+    imagesc3d22(outndi.x(1:164, 1:205, 1:205).*mask, ['NDI init zeros ', num2str(outndi.rmse(end))], [90, 90, 90], [-0.1, 0.1]);
+    outputs_sm{i} = outndi;
+end
+%%
+figure;
+hold on;
+texts_ = {};
+vals = [];
+for i = 1:length(outputs_sm)
+    plot(outputs_sm{i}.rmse, 'LineWidth', 2, 'Color', colors{i});
+    [val, idx] = min(outputs_sm{i}.rmse);
+%     scatter([idx], [val], "filled");
+%     texts_{i*2 - 1} = ['lr=', num2str(lrs(i))];
+%     texts_{i*2} = '';
+    texts_{i} = ['lr=', num2str(lrs(i))];
+    vals = [vals, val];
+end
+plot(1:length(outputs_sm{1}.rmse), ones(size(outputs_sm{1}.rmse))*min(vals), 'k--', 'LineWidth', 2);
+texts_{end+1} = '';
+set(gca,'fontsize', 14); 
+legend(texts_, 'FontSize',16);
+xlim([1, 30]);
+ylim([60, 100]);
+title('Without magnitude', 'FontSize', 26);
+xlabel('iterations', 'FontSize',20);
+ylabel('NRMSE', 'FontSize',20);
+drawnow;
+
+%% 
+

@@ -1,0 +1,410 @@
+clearvars
+close all
+clc
+%% Load Data
+addpath('./Data/');
+addpath('./matlab_files/');
+addpath('./matlab_files/nii/');
+
+load('mask_final.mat');
+load('QSMnetp_recon.mat');
+load('xQSM_recon.mat');
+load('ours_recon.mat');
+load('fansi_recon.mat');
+mask = mask_final;
+clear mask_final;
+
+phs_scale =  42.7747892 * 7;
+N = [256, 256, 256];
+TEv = [4, 12, 20, 28] * 1e-3;
+
+
+freqmap = load_nii('./Data/Frequency.nii.gz').img;
+gtsim2 = load_nii('./Data/Sim2ChiGT.nii.gz').img;
+mag = load_nii('./Data/Magnitude.nii.gz').img;
+aux = zeros(164, 205, 205);
+den = zeros(164, 205, 205);
+for i = 1:length(TEv)
+    aux = aux + TEv(i) * mag(:, :, :, i).^2;
+    den = den + TEv(i) * mag(:, :, :, i);
+end
+
+% mag = mag ./ max(max(max(mag))); 
+% mag = mag(:, :, :, 4);
+mag = aux ./ (den + eps);
+mag = mag / max(mag(:));
+% mag = mask;
+
+%% QSMnetp
+
+rmse_qsmnet1 = compute_rmse(QSMnetp_recon, gtsim2, mask);
+disp(['QSMnet+ Base RMSE ', num2str(rmse_qsmnet1)]);
+
+%%
+params = {};
+params.input = zeros(N);
+params.input(1:164, 1:205, 1:205) = freqmap / phs_scale;
+params.weight = zeros(N);
+params.weight(1:164, 1:205, 1:205) = mag .* mask;
+
+params.K = dipole_kernel(size(params.input), [1,1,1], 0);
+
+params.isPrecond = true;
+params.precond = zeros(N);
+
+params.precond(1:164, 1:205, 1:205) = QSMnetp_recon.*mask;
+
+params.GT = zeros(N);
+params.GT(1:164, 1:205, 1:205) = gtsim2 .* mask;
+
+params.mask = zeros(N);
+params.mask(1:164, 1:205, 1:205) = mask;
+
+params.maxOuterIter = 500;
+
+params.tau = 2;
+
+outndi_qsmnet = ndi(params);
+
+imagesc3d22(outndi_qsmnet.x(1:164, 1:205, 1:205).*mask, ['QSMnet+ ', num2str(rmse_qsmnet1) , ' to ', num2str(outndi_qsmnet.rmse(end))], [90, 90, 90], [-0.1, 0.1]);
+
+%% xQSM 
+
+rmse_xqsm1 = compute_rmse(xQSM_recon, gtsim2, mask);
+disp(['xQSM Base RMSE ', num2str(rmse_xqsm1)]);
+
+%%
+params = {};
+params.input = zeros(N);
+params.input(1:164, 1:205, 1:205) = freqmap / phs_scale;
+
+params.weight = zeros(N);
+params.weight(1:164, 1:205, 1:205) = mag .* mask;
+
+params.K = dipole_kernel(size(params.input), [1,1,1], 0);
+
+params.isPrecond = true;
+params.precond = zeros(N);
+params.precond(1:164, 1:205, 1:205) = xQSM_recon.*mask;
+
+params.GT = zeros(N);
+params.GT(1:164, 1:205, 1:205) = gtsim2 .* mask;
+
+params.mask = zeros(N);
+params.mask(1:164, 1:205, 1:205) = mask;
+
+params.maxOuterIter = 500;
+
+params.tau = 2;
+
+outndi_xqsm = ndi(params);
+
+imagesc3d22(outndi_xqsm.x(1:164, 1:205, 1:205).*mask, ['xQSM ', num2str(rmse_xqsm1) , ' to ', num2str(outndi_xqsm.rmse(end))], [90, 90, 90], [-0.1, 0.1]);
+
+
+
+%% CPnet 
+
+rmse_cpnet = compute_rmse(ours, gtsim2, mask);
+disp(['CPnet Base RMSE ', num2str(rmse_cpnet)]);
+
+%%
+
+params = {};
+params.input = zeros(N);
+params.input(1:164, 1:205, 1:205) = freqmap / phs_scale;
+
+params.weight = zeros(N);
+params.weight(1:164, 1:205, 1:205) = mag .* mask;
+
+params.K = dipole_kernel(size(params.input), [1,1,1], 0);
+
+params.isPrecond = true;
+params.precond = zeros(N);
+params.precond(1:164, 1:205, 1:205) = ours.*mask;
+
+params.GT = zeros(N);
+params.GT(1:164, 1:205, 1:205) = gtsim2 .* mask;
+
+params.mask = zeros(N);
+params.mask(1:164, 1:205, 1:205) = mask;
+
+params.maxOuterIter = 500;
+
+params.tau = 2;
+
+outndi_cpnet = ndi(params);
+
+imagesc3d22(outndi_cpnet.x(1:164, 1:205, 1:205).*mask, ['CPnet ', num2str(rmse_cpnet) , ' to ', num2str(outndi_cpnet.rmse(end))], [90, 90, 90], [-0.1, 0.1]);
+
+
+%% FANSI 
+
+rmse_fansi = compute_rmse(fansi_recon, gtsim2, mask);
+disp(['FANSI Base RMSE ', num2str(rmse_fansi)]);
+
+%%
+
+params = {};
+params.input = zeros(N);
+params.input(1:164, 1:205, 1:205) = freqmap / phs_scale;
+
+params.weight = zeros(N);
+params.weight(1:164, 1:205, 1:205) = mag .* mask;
+
+params.K = dipole_kernel(size(params.input), [1,1,1], 0);
+
+params.isPrecond = true;
+params.precond = zeros(N);
+params.precond(1:164, 1:205, 1:205) = fansi_recon.*mask;
+
+params.GT = zeros(N);
+params.GT(1:164, 1:205, 1:205) = gtsim2 .* mask;
+
+params.mask = zeros(N);
+params.mask(1:164, 1:205, 1:205) = mask;
+
+params.maxOuterIter = 500;
+
+params.tau = 2;
+
+outndi_fansi = ndi(params);
+
+imagesc3d22(outndi_fansi.x(1:164, 1:205, 1:205).*mask, ['FANSI ', num2str(rmse_fansi) , ' to ', num2str(outndi_fansi.rmse(end))], [90, 90, 90], [-0.1, 0.1]);
+
+
+
+%% NDI alone
+
+params = {};
+params.input = zeros(N);
+params.input(1:164, 1:205, 1:205) = freqmap / phs_scale;
+
+params.weight = zeros(N);
+params.weight(1:164, 1:205, 1:205) = mag .* mask;
+
+params.K = dipole_kernel(size(params.input), [1,1,1], 0);
+
+params.GT = zeros(N);
+params.GT(1:164, 1:205, 1:205) = gtsim2 .* mask;
+
+params.mask = zeros(N);
+params.mask(1:164, 1:205, 1:205) = mask;
+
+params.maxOuterIter = 500;
+
+params.tau = 2;
+
+outndi = ndi(params);
+
+imagesc3d22(outndi.x(1:164, 1:205, 1:205).*mask, ['NDI init zeros ', num2str(outndi.rmse(end))], [90, 90, 90], [-0.1, 0.1]);
+
+%%
+figure;
+hold on;
+plot(outndi_qsmnet.rmse, 'LineWidth', 3);
+plot(outndi_xqsm.rmse, 'LineWidth', 3);
+plot(outndi.rmse, 'LineWidth', 3);
+plot(outndi_cpnet.rmse, 'LineWidth', 3)
+plot(outndi_fansi.rmse, 'LineWidth', 3)
+legend({'QSMnet+', 'xQSM', 'Zeros', 'in-House', 'FANSI'});
+
+set(gca,'fontsize', 14); 
+title('Without magnitude information', 'FontSize', 26);
+xlabel('Iterations', 'FontSize',20);
+ylabel('NRMSE', 'FontSize',20);
+xlim([1, 20])
+drawnow;
+
+
+%% ------------------------------------------------------------------------
+
+
+
+%%QSMnetp
+params = {};
+params.input = zeros(N);
+params.input(1:164, 1:205, 1:205) = freqmap / phs_scale;
+params.weight = zeros(N);
+params.weight(1:164, 1:205, 1:205) = mag .* mask;
+
+params.K = dipole_kernel(size(params.input), [1,1,1], 0);
+
+params.isPrecond = true;
+params.precond = zeros(N);
+
+params.precond(1:164, 1:205, 1:205) = QSMnetp_recon.*mask;
+
+params.GT = zeros(N);
+params.GT(1:164, 1:205, 1:205) = gtsim2 .* mask;
+
+params.mask = zeros(N);
+params.mask(1:164, 1:205, 1:205) = mask;
+
+params.maxOuterIter = find(outndi_qsmnet.rmse == min(outndi_qsmnet.rmse));
+
+params.tau = 2;
+
+outndi_qsmnet = ndi(params);
+
+imagesc3d22(outndi_qsmnet.x(1:164, 1:205, 1:205).*mask, ['QSMnet+ ', num2str(rmse_qsmnet1) , ' to ', num2str(outndi_qsmnet.rmse(end))], [90, 90, 90], [-0.1, 0.1]);
+
+%% xQSM 
+
+params = {};
+params.input = zeros(N);
+params.input(1:164, 1:205, 1:205) = freqmap / phs_scale;
+
+params.weight = zeros(N);
+params.weight(1:164, 1:205, 1:205) = mag .* mask;
+
+params.K = dipole_kernel(size(params.input), [1,1,1], 0);
+
+params.isPrecond = true;
+params.precond = zeros(N);
+params.precond(1:164, 1:205, 1:205) = xQSM_recon.*mask;
+
+params.GT = zeros(N);
+params.GT(1:164, 1:205, 1:205) = gtsim2 .* mask;
+
+params.mask = zeros(N);
+params.mask(1:164, 1:205, 1:205) = mask;
+
+params.maxOuterIter = find(outndi_xqsm.rmse == min(outndi_xqsm.rmse));
+
+params.tau = 2;
+
+outndi_xqsm = ndi(params);
+
+imagesc3d22(outndi_xqsm.x(1:164, 1:205, 1:205).*mask, ['xQSM ', num2str(rmse_xqsm1) , ' to ', num2str(outndi_xqsm.rmse(end))], [90, 90, 90], [-0.1, 0.1]);
+
+
+
+%% CPnet 
+
+
+params = {};
+params.input = zeros(N);
+params.input(1:164, 1:205, 1:205) = freqmap / phs_scale;
+
+params.weight = zeros(N);
+params.weight(1:164, 1:205, 1:205) = mag .* mask;
+
+params.K = dipole_kernel(size(params.input), [1,1,1], 0);
+
+params.isPrecond = true;
+params.precond = zeros(N);
+params.precond(1:164, 1:205, 1:205) = ours.*mask;
+
+params.GT = zeros(N);
+params.GT(1:164, 1:205, 1:205) = gtsim2 .* mask;
+
+params.mask = zeros(N);
+params.mask(1:164, 1:205, 1:205) = mask;
+
+params.maxOuterIter = find(outndi_cpnet.rmse == min(outndi_cpnet.rmse));
+
+params.tau = 2;
+
+outndi_cpnet = ndi(params);
+
+imagesc3d22(outndi_cpnet.x(1:164, 1:205, 1:205).*mask, ['CPnet ', num2str(rmse_cpnet) , ' to ', num2str(outndi_cpnet.rmse(end))], [90, 90, 90], [-0.1, 0.1]);
+
+
+%% FANSI 
+
+params = {};
+params.input = zeros(N);
+params.input(1:164, 1:205, 1:205) = freqmap / phs_scale;
+
+params.weight = zeros(N);
+params.weight(1:164, 1:205, 1:205) = mag .* mask;
+
+params.K = dipole_kernel(size(params.input), [1,1,1], 0);
+
+params.isPrecond = true;
+params.precond = zeros(N);
+params.precond(1:164, 1:205, 1:205) = fansi_recon.*mask;
+
+params.GT = zeros(N);
+params.GT(1:164, 1:205, 1:205) = gtsim2 .* mask;
+
+params.mask = zeros(N);
+params.mask(1:164, 1:205, 1:205) = mask;
+
+params.maxOuterIter = find(outndi_fansi.rmse == min(outndi_fansi.rmse));
+
+params.tau = 2;
+
+outndi_fansi = ndi(params);
+
+imagesc3d22(outndi_fansi.x(1:164, 1:205, 1:205).*mask, ['FANSI ', num2str(rmse_fansi) , ' to ', num2str(outndi_fansi.rmse(end))], [90, 90, 90], [-0.1, 0.1]);
+
+
+
+%% NDI alone
+
+params = {};
+params.input = zeros(N);
+params.input(1:164, 1:205, 1:205) = freqmap / phs_scale;
+
+params.weight = zeros(N);
+params.weight(1:164, 1:205, 1:205) = mag .* mask;
+
+params.K = dipole_kernel(size(params.input), [1,1,1], 0);
+
+params.GT = zeros(N);
+params.GT(1:164, 1:205, 1:205) = gtsim2 .* mask;
+
+params.mask = zeros(N);
+params.mask(1:164, 1:205, 1:205) = mask;
+
+params.maxOuterIter = find(outndi.rmse == min(outndi.rmse));
+
+params.tau = 2;
+
+outndi = ndi(params);
+
+imagesc3d22(outndi.x(1:164, 1:205, 1:205).*mask, ['NDI init zeros ', num2str(outndi.rmse(end))], [90, 90, 90], [-0.1, 0.1]);
+
+
+
+%%
+figure;
+hold on;
+plot(outndi_qsmnet.rmse, 'LineWidth', 3);
+plot(outndi_xqsm.rmse, 'LineWidth', 3);
+plot(outndi.rmse, 'LineWidth', 3);
+plot(outndi_cpnet.rmse, 'LineWidth', 3)
+plot(outndi_fansi.rmse, 'LineWidth', 3)
+legend({'QSMnet+', 'xQSM', 'Zeros', 'in-House', 'FANSI'});
+
+set(gca,'fontsize', 14); 
+title('Without magnitude information', 'FontSize', 26);
+xlabel('Iterations', 'FontSize',20);
+ylabel('NRMSE', 'FontSize',20);
+% xlim([1, 20])
+drawnow;
+
+%%
+imgs = {};
+imgs{1} = outndi.x(1:164, 1:205, 1:205) .* mask;
+imgs{2} = outndi_qsmnet.x(1:164, 1:205, 1:205) .* mask;
+imgs{3} = outndi_xqsm.x(1:164, 1:205, 1:205) .* mask;
+imgs{4} = outndi_cpnet.x(1:164, 1:205, 1:205) .* mask;
+imgs{5} = outndi_fansi.x(1:164, 1:205, 1:205) .* mask;
+
+imagen_papers2(imgs, [1,1,1], [90,90,90], [-0.1, 0.1], 'vertical', 0);
+
+
+%% init
+% imgs = {};
+% imgs{1} =   mask*eps;
+% imgs{2} = QSMnetp_recon .* mask;
+% imgs{3} = xQSM_recon .* mask;
+% imgs{4} = (ours + eps) .* mask;
+% imgs{5} = (fansi_recon+eps) .* mask;
+% 
+% imagen_papers2(imgs, [1,1,1], [90,90,90], [-0.1, 0.1], 'vertical', 0);
+
+%%

@@ -3,13 +3,6 @@ import scipy.io
 import time
 import os
 import numpy as np
-# import sys
-
-# Add the current directory and external_code paths to system path
-# sys.path.append('.')
-# sys.path.append('./external_code/Code')
-
-from utils import padding_data, crop_data
 import network_model
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
@@ -23,6 +16,39 @@ epoch = 25
 sub_num = 1  # number of subjects in testset
 voxel_size = [1, 1, 1]  # resolution of subject
 dir_net = '../Checkpoints/'
+
+def zero_padding(array, factor=8):
+    original_shape = np.array(array.shape)
+
+    new_shape = np.ceil(original_shape / factor) * factor
+    new_shape = new_shape.astype(int)
+
+    padding_width = new_shape - original_shape
+    pad_before = (padding_width // 2).astype(int)
+    pad_after = padding_width - pad_before
+
+    pad_config = [(pad_before[i], pad_after[i]) for i in range(len(original_shape))]
+
+    padded_array = np.pad(array, pad_config, mode='constant', constant_values=0)
+
+    padding_info = {
+        'original_shape': original_shape,
+        'pad_width': pad_config
+    }
+
+    return padded_array, padding_info
+
+
+def zero_removing(padded_array, padding_info):
+    original_shape = padding_info['original_shape']
+    pad_width = padding_info['pad_width']
+
+    slices = tuple(slice(pad_width[i][0], pad_width[i][0] + original_shape[i])
+                   for i in range(len(original_shape)))
+
+    unpadded_array = padded_array[slices]
+
+    return unpadded_array
 
 
 def inf(field):
@@ -39,7 +65,10 @@ def inf(field):
     tf.compat.v1.reset_default_graph()
 
     field = (field - b_mean) / b_std
-    [pfield, N_difference, N] = padding_data(field)
+    pfield, padding_info = zero_padding(field, factor=16)
+    N = pfield.shape
+    pfield = np.expand_dims(pfield, axis=0)
+    pfield = np.expand_dims(pfield, axis=4)
 
     Z = tf.compat.v1.placeholder("float", [None, N[0], N[1], N[2], 1])
     keep_prob = tf.compat.v1.placeholder("float")
@@ -55,7 +84,7 @@ def inf(field):
         print('Done!')
         print('##########Inference...##########')
         result_im = y_std * sess.run(feed_result, feed_dict={Z: pfield, keep_prob: 1.0}) + y_mean
-        result_im = crop_data(result_im.squeeze(), N_difference)
+        result_im = zero_removing(result_im.squeeze(), padding_info)
 
     print('All done!')
     return result_im
